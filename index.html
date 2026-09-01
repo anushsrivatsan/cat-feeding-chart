@@ -4,6 +4,10 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Feeding Chart</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#D99A1B" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -325,7 +329,7 @@
    CONFIGURE THESE THREE VALUES — see SETUP.md
    ============================================================ */
 const CONFIG = {
-  CLIENT_ID: "790377752382-09nc5i1e8v14avl95nqthtdf4hmbfk07.apps.googleusercontent.com",
+  CLIENT_ID: "AIzaSyDDJpeTHdA7neuEKdvJBB5O7ML_nPoL8gs",
   SPREADSHEET_ID: "1VCarWa1x8IiOlt8QW8RyG3asUNMw7NpSHje1GzOXkYc",
   SHEETS: {
     LOG: "Log",
@@ -584,6 +588,12 @@ document.getElementById("submit-btn").addEventListener("click", async () => {
     btn.disabled = false;
   }
 });
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
