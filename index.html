@@ -341,12 +341,37 @@ const CONFIG = {
 /* ============================================================ */
 
 const SCOPES = "https://www.googleapis.com/auth/spreadsheets email profile openid";
+const TOKEN_STORAGE_KEY = "feedingchart_token";
 let accessToken = null;
 let tokenClient = null;
 let cats = [];
 let brands = [];
 let todayLog = [];
 let selectedCat = null;
+
+/* ---------- Token persistence ---------- */
+// Access tokens last ~1hr. We store it (with its own expiry) so a page
+// refresh reuses it instead of forcing sign-in again every time.
+function saveToken(resp){
+  const record = {
+    access_token: resp.access_token,
+    // small safety buffer so we never use a token that expires mid-request
+    expires_at: Date.now() + (resp.expires_in - 60) * 1000
+  };
+  try{ localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(record)); }catch(e){}
+}
+function loadStoredToken(){
+  try{
+    const raw = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if(!raw) return null;
+    const record = JSON.parse(raw);
+    if(!record.access_token || Date.now() >= record.expires_at) return null;
+    return record.access_token;
+  }catch(e){ return null; }
+}
+function clearStoredToken(){
+  try{ localStorage.removeItem(TOKEN_STORAGE_KEY); }catch(e){}
+}
 
 function isConfigured(){
   return !CONFIG.CLIENT_ID.startsWith("YOUR_") && !CONFIG.SPREADSHEET_ID.startsWith("YOUR_");
@@ -399,13 +424,41 @@ window.addEventListener("load", () => {
         client_id: CONFIG.CLIENT_ID,
         scope: SCOPES,
         callback: async (resp) => {
-          if(resp.error){ showToast("Sign-in failed: " + resp.error, true); return; }
+          if(resp.error){
+            // Silent attempts can fail quietly (e.g. no existing session) —
+            // only surface an error toast for an actual button-click attempt.
+            if(resp.error !== "immediate_failed" && resp.error !== "user_logged_out"){
+              showToast("Sign-in failed: " + resp.error, true);
+            }
+            document.getElementById("signin-panel").style.display = "block";
+            return;
+          }
+          saveToken(resp);
           accessToken = resp.access_token;
           document.getElementById("signin-panel").style.display = "none";
           document.getElementById("app").style.display = "block";
           await loadAll();
         }
       });
+
+      // Reuse a still-valid stored token first — no button, no popup.
+      const stored = loadStoredToken();
+      if(stored){
+        accessToken = stored;
+        document.getElementById("signin-panel").style.display = "none";
+        document.getElementById("app").style.display = "block";
+        loadAll().catch(() => {
+          // Stored token turned out to be invalid (e.g. revoked) — fall back to sign-in.
+          clearStoredToken();
+          accessToken = null;
+          document.getElementById("app").style.display = "none";
+          document.getElementById("signin-panel").style.display = "block";
+        });
+      } else {
+        // No valid stored token — try a silent, popup-free re-auth in case
+        // the browser still has an active Google session from before.
+        tokenClient.requestAccessToken({ prompt: "none" });
+      }
     }
   }, 100);
   document.getElementById("signin-btn").addEventListener("click", () => {
@@ -461,7 +514,7 @@ async function loadAll(){
     if(profile){
       document.getElementById("signed-in-as").innerHTML = `Signed in as ${profile.email || profile.name || "you"} &middot; <a href="#" id="switch-account">switch account</a>`;
       const sw = document.getElementById("switch-account");
-      if(sw) sw.addEventListener("click", (e) => { e.preventDefault(); google.accounts.oauth2.revoke(accessToken, () => location.reload()); });
+      if(sw) sw.addEventListener("click", (e) => { e.preventDefault(); clearStoredToken(); google.accounts.oauth2.revoke(accessToken, () => location.reload()); });
     }
 
     renderCats();
