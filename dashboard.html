@@ -123,7 +123,7 @@
   </div>
 
   <h1>Dashboard</h1>
-  <p class="sub">Costs and wastage are a read-only live view — anyone with this link can see them. Stock, invoices and prices need a staff sign-in.</p>
+  <p class="sub">Costs and wastage are a read-only live view — anyone with this link can see them. Stock, invoices and prices need a sign-in.</p>
 
   <div class="tabs" role="tablist">
     <button class="tab active" id="tab-costs" role="tab">Costs &amp; wastage</button>
@@ -247,8 +247,8 @@
 
   <div id="stock-view" style="display:none;">
     <div class="panel" id="stock-signin">
-      <h2>Staff sign in</h2>
-      <p class="desc">Stock, invoices and prices are visible to signed-in staff only.</p>
+      <h2>Please sign in</h2>
+      <p class="desc">Stock, invoices and prices are visible to signed-in persons only.</p>
       <form id="stock-signin-form" class="signin-form">
         <input type="email" id="stock-email" autocomplete="username" placeholder="Email" required>
         <input type="password" id="stock-password" autocomplete="current-password" placeholder="Password" required>
@@ -284,10 +284,10 @@
               <label><input type="checkbox" id="sk-show-inactive"> show discontinued</label>
             </div>
           </div>
-          <p class="desc">Packets received, less packets fed and wasted — straight from the stock ledger. “Days left” uses the last 30 days of use.</p>
+          <p class="desc">Stock received, less what was fed and wasted — straight from the stock ledger, kept in grams (so feeds logged in grams are exact) and shown in packets too. “Days left” uses the last 30 days of use.</p>
           <div class="table-scroll">
             <table id="onhand-table">
-              <thead><tr><th>Item</th><th class="num">Pack</th><th class="num">Purchased</th><th class="num">Fed</th><th class="num">Wasted</th><th class="num">Adjusted</th><th class="num">On hand</th><th class="num">Avg cost</th><th class="num">Value</th><th class="num">Use / day</th><th class="num">Days left</th><th>Status</th></tr></thead>
+              <thead><tr><th>Item</th><th class="num">Pack</th><th class="num">Purchased</th><th class="num">Fed</th><th class="num">Wasted</th><th class="num">Adjusted</th><th class="num">On hand</th><th class="num">On hand (g)</th><th class="num">Avg cost</th><th class="num">Value</th><th class="num">Use / day</th><th class="num">Days left</th><th>Status</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -335,7 +335,7 @@
           <p class="desc">Every movement in and out, with the running balance for that item. Deleted entries appear as reversals — nothing is ever erased.</p>
           <div class="table-scroll">
             <table id="led-table">
-              <thead><tr><th>Date</th><th>Time</th><th>Type</th><th>Item</th><th class="num">Pack</th><th class="num">Change</th><th class="num">Balance</th><th>Reference</th><th>By</th></tr></thead>
+              <thead><tr><th>Date</th><th>Time</th><th>Type</th><th>Item</th><th class="num">Pack</th><th class="num">Change</th><th class="num">Balance</th><th class="num">Change (g)</th><th class="num">Balance (g)</th><th>Reference</th><th>By</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -354,7 +354,7 @@
     The key is meant to be public — Row Level Security makes it read-only.)
    ============================================================ */
 const CONFIG = {
-  SUPABASE_URL: "https://omxgwgzlcicsdubjcuix.supabase.co",
+  SUPABASE_URL: "https://omxgwgzlcicsdubjcuix.supabase.co/",
   SUPABASE_KEY: "sb_publishable_ezYqvCxysynlgr6fHoy9mw_lltuVHBy"
 };
 /* ============================================================ */
@@ -613,7 +613,7 @@ function render(){
 
   document.getElementById("kpi-spend").textContent = money(totalSpend);
   document.getElementById("kpi-spend-note").textContent = `over ${days} day${days===1?"":"s"}`;
-  document.getElementById("kpi-packets").textContent = totalPackets;
+  document.getElementById("kpi-packets").textContent = qty(totalPackets);
   document.getElementById("kpi-packets-note").textContent = `${(totalPackets/days).toFixed(1)} / day avg`;
   document.getElementById("kpi-avgday").textContent = money(avgDay);
   document.getElementById("kpi-topcat").textContent = topCat ? topCat[0] : "—";
@@ -660,7 +660,7 @@ function render(){
   Object.entries(byCat).sort((a,b)=>b[1].spend-a[1].spend).forEach(([cat,d]) => {
     const perDay = d.spend / days;
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${esc(cat)}</td><td class="num">${d.packets}</td><td class="num">${money(d.spend)}</td><td class="num">${money(perDay)}</td><td class="num">${money(perDay*30)}</td><td class="num">${money(perDay*365)}</td>`;
+    tr.innerHTML = `<td>${esc(cat)}</td><td class="num">${qty(d.packets)}</td><td class="num">${money(d.spend)}</td><td class="num">${money(perDay)}</td><td class="num">${money(perDay*30)}</td><td class="num">${money(perDay*365)}</td>`;
     tbody.appendChild(tr);
   });
 
@@ -789,8 +789,12 @@ function fmtDate(ymd){
 function fmtTime(ts){
   return new Date(ts).toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit", hour12:true, timeZone:"Asia/Kolkata" }).toUpperCase();
 }
-function qty(n){ const v = Math.round(Number(n) * 100) / 100; return String(Object.is(v, -0) ? 0 : v); }
-function signedQty(n){ const v = Math.round(Number(n) * 100) / 100; return (v > 0 ? "+" : "") + v; }
+// Round half away from zero, so -63.75 and 63.75 round the same way (Math.round alone doesn't).
+function roundTo(n, places){ const f = Math.pow(10, places), x = Number(n); const v = Math.sign(x) * Math.round(Math.abs(x) * f) / f; return Object.is(v, -0) ? 0 : v; }
+function qty(n){ return String(roundTo(n, 2)); }
+function fmtGrams(n){ return roundTo(n, 1).toLocaleString("en-IN", { maximumFractionDigits: 1 }); }
+function signedGrams(n){ const v = roundTo(n, 1); return (v > 0 ? "+" : "") + fmtGrams(v); }
+function signedQty(n){ const v = roundTo(n, 2); return (v > 0 ? "+" : "") + v; }
 function itemName(brand, flavor){ return esc(brand) + (flavor ? " — " + esc(flavor) : ""); }
 function rangeFor(prefix){
   const mode = byId(prefix + "-range").value, today = istToday();
@@ -975,6 +979,7 @@ function renderOnHand(){
       `<td class="num">${qty(r.purchased)}</td><td class="num">${qty(r.fed)}</td><td class="num">${qty(r.wasted)}</td>` +
       `<td class="num">${Number(r.adjusted) ? signedQty(r.adjusted) : "—"}</td>` +
       `<td class="num"><strong>${qty(r.on_hand)}</strong></td>` +
+      `<td class="num">${r.on_hand_g === null || r.on_hand_g === undefined ? "—" : fmtGrams(r.on_hand_g)}</td>` +
       `<td class="num">${r.avg_cost === null || r.avg_cost === undefined ? "—" : money(Number(r.avg_cost))}</td>` +
       `<td class="num">${val === null ? "—" : money(val)}</td>` +
       `<td class="num">${daily > 0 ? qty(daily) : "—"}</td>` +
@@ -1059,7 +1064,7 @@ let stkLedger = [], ledDone = true, ledSeq = 0;
 const LEDGER_TYPES = { PURCHASE: "Purchase", FEED: "Fed", WASTAGE: "Wastage", ADJUSTMENT: "Adjustment" };
 function ledgerQuery(){
   const r = rangeFor("led"), prod = byId("led-item").value, type = byId("led-type").value;
-  return "stock_ledger?select=id,txn_at,txn_date,txn_type,is_reversal,product_id,brand,flavor,pack_size_grams,quantity_change,balance,reference,note,created_by" +
+  return "stock_ledger?select=id,txn_at,txn_date,txn_type,is_reversal,product_id,brand,flavor,pack_size_grams,quantity_change,balance,grams_change,balance_g,reference,note,created_by" +
     dateFilter("txn_date", r) + (prod ? `&product_id=eq.${encodeURIComponent(prod)}` : "") + (type ? `&txn_type=eq.${type}` : "") + "&order=id.desc";
 }
 async function loadLedger(reset){
@@ -1086,6 +1091,8 @@ function renderLedger(){
       `<td>${itemName(h.brand, h.flavor)}</td><td class="num">${h.pack_size_grams ? esc(h.pack_size_grams) + "g" : "—"}</td>` +
       `<td class="num ${change > 0 ? "qty-in" : "qty-out"}">${signedQty(change)}</td>` +
       `<td class="num">${h.balance === null || h.balance === undefined ? "—" : qty(h.balance)}</td>` +
+      `<td class="num ${Number(h.grams_change) > 0 ? "qty-in" : "qty-out"}">${h.grams_change === null || h.grams_change === undefined ? "—" : signedGrams(h.grams_change)}</td>` +
+      `<td class="num">${h.balance_g === null || h.balance_g === undefined ? "—" : fmtGrams(h.balance_g)}</td>` +
       `<td>${esc(h.reference)}${h.note ? `<div class="subtle">${esc(h.note)}</div>` : ""}</td><td class="subtle">${esc(h.created_by)}</td>`;
     tbody.appendChild(tr);
   });
@@ -1099,8 +1106,8 @@ byId("led-csv").addEventListener("click", async () => {
   try{
     const rows = await authGetAll(ledgerQuery());      // everything that matches the filters, not just what's on screen
     downloadCsv(`stock-ledger-${istToday()}.csv`, toCsv(
-      ["Date", "Time", "Type", "Reversal", "Brand", "Flavor", "Pack size (g)", "Change", "Balance", "Reference", "Note", "By"],
-      rows.map(h => [h.txn_date, fmtTime(h.txn_at), h.txn_type, h.is_reversal ? "yes" : "", h.brand, h.flavor, h.pack_size_grams === null ? "" : Number(h.pack_size_grams), Number(h.quantity_change), h.balance === null ? "" : Number(h.balance), h.reference, h.note, h.created_by])));
+      ["Date", "Time", "Type", "Reversal", "Brand", "Flavor", "Pack size (g)", "Change (packets)", "Balance (packets)", "Change (g)", "Balance (g)", "Reference", "Note", "By"],
+      rows.map(h => [h.txn_date, fmtTime(h.txn_at), h.txn_type, h.is_reversal ? "yes" : "", h.brand, h.flavor, h.pack_size_grams === null ? "" : Number(h.pack_size_grams), Number(h.quantity_change), h.balance === null ? "" : Number(h.balance), h.grams_change === null || h.grams_change === undefined ? "" : Number(h.grams_change), h.balance_g === null || h.balance_g === undefined ? "" : Number(h.balance_g), h.reference, h.note, h.created_by])));
   }catch(err){ handleStockErr(err); }
 });
 function handleStockErr(err){

@@ -327,6 +327,21 @@
 
   .form-help{font-size:13px; color:var(--ink-soft); margin:-8px 0 16px; line-height:1.5;}
   .log-form select + input[type=text]{margin-top:8px;}
+
+  .label-row{display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px;}
+  .label-row > label{margin-bottom:0;}
+  .log-form label.switch{display:inline-flex; align-items:center; gap:7px; margin:0; font-size:12px; font-weight:600; color:var(--ink-soft); cursor:pointer; user-select:none;}
+  .switch input{
+    -webkit-appearance:none; appearance:none; position:relative; flex:none; margin:0;
+    width:32px; height:18px; border-radius:999px; background:#D9D2C0; cursor:pointer; transition:background .15s;
+  }
+  .switch input::after{
+    content:""; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%;
+    background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.25); transition:transform .15s;
+  }
+  .switch input:checked{background:var(--sage);}
+  .switch input:checked::after{transform:translateX(14px);}
+  .switch input:focus-visible{outline:2px solid var(--ink); outline-offset:2px;}
 </style>
 </head>
 <body>
@@ -381,8 +396,14 @@
           <select id="pack-size"></select>
         </div>
         <div>
-          <label for="packets">Packets</label>
+          <div class="label-row">
+            <label for="packets" id="amount-label">Packets</label>
+            <label class="switch" title="Take this feed off the stock in grams instead of packets">
+              <input type="checkbox" id="debit-grams"><span>Debit in Grams</span>
+            </label>
+          </div>
           <select id="packets"></select>
+          <input type="number" id="grams-fed" min="0" step="any" inputmode="decimal" placeholder="Grams fed" style="display:none;">
         </div>
       </div>
       <div class="cost-hint" id="cost-hint"></div>
@@ -660,13 +681,27 @@ window.addEventListener("load", async () => {
 /* ---------- Load data ---------- */
 async function fetchToday(){
   const rows = await api(
-    `feed_log?select=id,log_time,cat,brand,flavor,pack_size,packets,logged_by` +
+    `feed_log?select=id,log_time,cat,brand,flavor,pack_size,packets,debit_unit,grams_fed,logged_by` +
     `&log_date=eq.${todayStr()}&order=logged_at.asc`
   );
-  todayLog = rows.map(r => ({
+  todayLog = rows.map(toTodayEntry);
+}
+
+function toTodayEntry(r){
+  return {
     time: r.log_time, cat: r.cat, brand: r.brand, flavor: r.flavor || "",
-    packSize: r.pack_size, packets: r.packets, loggedBy: r.logged_by || ""
-  }));
+    packSize: r.pack_size, packets: r.packets, loggedBy: r.logged_by || "",
+    unit: r.debit_unit === "grams" ? "grams" : "packets",
+    grams: r.grams_fed === null || r.grams_fed === undefined ? null : Number(r.grams_fed)
+  };
+}
+const fmtNum = (n) => String(Math.round(Number(n) * 100) / 100);
+// "2 packets", "30 g" or "1 packet + 30 g"
+function amountText(packets, grams){
+  const parts = [];
+  if(packets > 0) parts.push(`${fmtNum(packets)} packet${Number(packets) === 1 ? "" : "s"}`);
+  if(grams > 0) parts.push(`${fmtNum(grams)} g`);
+  return parts.join(" + ");
 }
 
 const CATS_Q = "cats?select=name,photo_url&active=eq.true&order=sort_order.asc,name.asc";
@@ -709,8 +744,10 @@ document.addEventListener("visibilitychange", () => { if(document.visibilityStat
 /* ---------- Render ---------- */
 function fedCountFor(catName){
   const entries = todayLog.filter(e => e.cat === catName);
-  const packets = entries.reduce((sum, e) => sum + (Number(e.packets) || 0), 0);
-  return { times: entries.length, packets };
+  // Feeds logged in grams are summed in grams; feeds logged in packets in packets.
+  const packets = entries.filter(e => e.unit !== "grams").reduce((sum, e) => sum + (Number(e.packets) || 0), 0);
+  const grams = entries.filter(e => e.unit === "grams").reduce((sum, e) => sum + (Number(e.grams) || 0), 0);
+  return { times: entries.length, packets, grams };
 }
 
 function renderCats(){
@@ -726,7 +763,7 @@ function renderCats(){
       <div class="cat-photo-wrap"><img src="${esc(imgUrl)}" alt="${esc(cat.name)}"></div>
       <div class="cat-name">${esc(cat.name)}</div>
       ${fed.times > 0
-        ? `<div class="fed-badge"><span class="dot"></span>Fed ${fed.times}x today &middot; ${fed.packets} packet${fed.packets===1?"":"s"}</div>`
+        ? `<div class="fed-badge"><span class="dot"></span>Fed ${fed.times}x today &middot; ${amountText(fed.packets, fed.grams)}</div>`
         : `<div class="fed-badge not-fed">Not fed yet today</div>`}
     `;
     card.querySelector("img").addEventListener("error", (ev) => { ev.target.src = PLACEHOLDER_SVG; });
@@ -745,7 +782,7 @@ function renderTodayList(){
     const sizeLabel = e.packSize ? ` (${esc(e.packSize)}g)` : "";
     const flavorLabel = e.flavor ? ` — ${esc(e.flavor)}` : "";
     const li = document.createElement("li");
-    li.innerHTML = `<span>${esc(e.time)} &middot; <strong>${esc(e.cat)}</strong> &mdash; ${esc(e.packets)} packet${e.packets==1?"":"s"} of ${esc(e.brand)}${flavorLabel}${sizeLabel}</span><span class="who">${esc(e.loggedBy)}</span>`;
+    li.innerHTML = `<span>${esc(e.time)} &middot; <strong>${esc(e.cat)}</strong> &mdash; ${e.unit === "grams" ? esc(fmtNum(e.grams)) + " g" : esc(e.packets) + " packet" + (e.packets == 1 ? "" : "s")} of ${esc(e.brand)}${flavorLabel}${sizeLabel}</span><span class="who">${esc(e.loggedBy)}</span>`;
     list.appendChild(li);
   });
 }
@@ -786,18 +823,43 @@ function currentProduct(){
   const packSize = parseFloat(document.getElementById("pack-size").value);
   return products.find(p => p.brand === brandName && p.flavor === flavorName && p.packSize === packSize);
 }
+function gramsMode(){ return document.getElementById("debit-grams").checked; }
 function updateCostHint(){
-  const packets = parseInt(document.getElementById("packets").value, 10) || 0;
   const product = currentProduct();
   const hint = document.getElementById("cost-hint");
   if(product && product.cost){
-    const total = (product.cost * packets).toFixed(2);
     const perGram = product.packSize ? (product.cost / product.packSize).toFixed(2) : null;
-    hint.textContent = `₹${product.cost.toFixed(2)} per packet${perGram ? ` · ₹${perGram}/g` : ""} · ₹${total} total`;
+    let total;
+    if(gramsMode()){
+      const g = parseFloat(document.getElementById("grams-fed").value);
+      total = Number.isFinite(g) && g > 0 && product.packSize ? `₹${(product.cost * g / product.packSize).toFixed(2)} for ${fmtNum(g)} g` : "enter the grams fed";
+    } else {
+      const packets = parseInt(document.getElementById("packets").value, 10) || 0;
+      total = `₹${(product.cost * packets).toFixed(2)} total`;
+    }
+    hint.textContent = `₹${product.cost.toFixed(2)} per packet${perGram ? ` · ₹${perGram}/g` : ""} · ${total}`;
   } else {
     hint.textContent = "";
   }
 }
+// "Debit in Grams": the packets dropdown is swapped for a grams box.
+function applyGramsMode(){
+  const on = gramsMode();
+  document.getElementById("packets").style.display = on ? "none" : "";
+  document.getElementById("grams-fed").style.display = on ? "block" : "none";
+  document.getElementById("amount-label").textContent = on ? "Grams fed" : "Packets";
+  document.getElementById("amount-label").htmlFor = on ? "grams-fed" : "packets";
+  updateCostHint();
+  if(on) document.getElementById("grams-fed").focus();
+}
+// Packets is the default for every feed; grams is an opt-in for that one feed.
+function resetFeedAmount(){
+  document.getElementById("debit-grams").checked = false;
+  document.getElementById("grams-fed").value = "";
+  applyGramsMode();
+}
+document.getElementById("debit-grams").addEventListener("change", applyGramsMode);
+document.getElementById("grams-fed").addEventListener("input", updateCostHint);
 document.getElementById("brand").addEventListener("change", populateFlavorOptions);
 document.getElementById("flavor").addEventListener("change", populatePackSizeOptions);
 document.getElementById("pack-size").addEventListener("change", updateCostHint);
@@ -810,6 +872,7 @@ function closeSideForms(){
   document.getElementById("item-form").classList.remove("active");
 }
 function selectCat(name){
+  if(name !== selectedCat) resetFeedAmount();
   selectedCat = name;
   closeSideForms();
   document.querySelectorAll(".cat-card").forEach(c => c.classList.toggle("selected", c.dataset.name === name));
@@ -819,6 +882,7 @@ function selectCat(name){
   document.getElementById("log-form").scrollIntoView({ behavior:"smooth", block:"nearest" });
 }
 document.getElementById("cancel-btn").addEventListener("click", () => {
+  resetFeedAmount();
   selectedCat = null;
   document.querySelectorAll(".cat-card").forEach(c => c.classList.remove("selected"));
   document.getElementById("log-form").classList.remove("active");
@@ -828,10 +892,23 @@ document.getElementById("submit-btn").addEventListener("click", async () => {
   if(!selectedCat){ showToast("Pick a cat first.", true); return; }
   const product = currentProduct();
   if(!product){ showToast("Choose a brand, flavor and pack size first.", true); return; }
+  const inGrams = gramsMode();
+  let amount, grams = null, packets = null;
+  if(inGrams){
+    grams = parseFloat(document.getElementById("grams-fed").value);
+    if(!Number.isFinite(grams) || grams <= 0){ showToast("Enter the grams fed.", true); return; }
+    if(!product.packSize){ showToast("This item has no pack size, so it can't be debited in grams.", true); return; }
+    if(grams > product.packSize &&
+       !confirm(`${fmtNum(grams)} g is more than one whole ${product.packSize} g pack.\n\nIs that correct?`)) return;
+    // Only the grams are sent; the database works out the packet equivalent and the cost.
+    amount = { debit_unit: "grams", grams_fed: grams };
+  } else {
+    packets = parseInt(document.getElementById("packets").value, 10);
+    amount = { packets };
+  }
   const btn = document.getElementById("submit-btn");
   btn.disabled = true;
   try{
-    const packets = parseInt(document.getElementById("packets").value, 10);
     // Date, time and "logged by" are stamped by the database, not this device.
     const rows = await api("feed_log", {
       method: "POST",
@@ -841,21 +918,18 @@ document.getElementById("submit-btn").addEventListener("click", async () => {
         brand: product.brand,
         flavor: product.flavor,
         pack_size: product.packSize,
-        packets,
+        ...amount,
         cost_per_packet: product.cost
       }
     });
-    const row = rows[0];
-    todayLog.push({
-      time: row.log_time, cat: row.cat, brand: row.brand, flavor: row.flavor || "",
-      packSize: row.pack_size, packets: row.packets, loggedBy: row.logged_by || ""
-    });
+    todayLog.push(toTodayEntry(rows[0]));
     const label = `${product.brand}${product.flavor ? " " + product.flavor : ""}`;
     const catName = selectedCat;
     selectedCat = null;
+    resetFeedAmount();
     renderCats();
     renderTodayList();
-    showToast(`Logged: ${catName} got ${packets} packet${packets===1?"":"s"} of ${label}.`);
+    showToast(`Logged: ${catName} got ${inGrams ? fmtNum(grams) + " g" : packets + " packet" + (packets === 1 ? "" : "s")} of ${label}.`);
     document.getElementById("log-form").classList.remove("active");
   }catch(err){
     if(err instanceof AuthError){ showSignedOut(err.message); return; }
