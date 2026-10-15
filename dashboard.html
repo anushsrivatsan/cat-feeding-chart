@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Fat Cats Feeding Chart — Cost Dashboard</title>
+<title>Feeding Chart — Cost Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -73,6 +73,45 @@
 
   .empty-state{color:var(--ink-soft); font-size:14px; text-align:center; padding:30px 0;}
   footer{text-align:center; color:var(--ink-soft); font-size:12.5px; margin-top:10px;}
+
+  input[type=text], input[type=email], input[type=password], input[type=search]{
+    padding:9px 10px; border:1px solid var(--line); border-radius:4px; font-family:'Inter',sans-serif;
+    font-size:14px; background:var(--cream); color:var(--ink);
+  }
+  .tabs{display:flex; gap:6px; margin:0 0 22px; border-bottom:1px solid var(--line);}
+  .tab{background:none; border:none; padding:10px 18px; font-family:'Inter',sans-serif; font-size:15px; font-weight:600;
+       color:var(--ink-soft); cursor:pointer; border-bottom:3px solid transparent; margin-bottom:-1px;}
+  .tab:hover{color:var(--ink);}
+  .tab.active{color:var(--ink); border-bottom-color:var(--marigold);}
+  .stock-bar{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px;}
+  .subtabs{display:flex; gap:6px; flex-wrap:wrap;}
+  .subtab{background:var(--card); border:1px solid var(--line); border-radius:999px; padding:7px 16px;
+          font-family:'Inter',sans-serif; font-size:13.5px; font-weight:600; color:var(--ink-soft); cursor:pointer;}
+  .subtab.active{background:var(--ink); color:#fff; border-color:var(--ink);}
+  .stock-user{font-size:12.5px; color:var(--ink-soft);}
+  .stock-user a{color:var(--ink-soft);}
+  .panel-head{display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:4px;}
+  .panel-head h2{margin:0;}
+  .head-tools{display:flex; gap:12px; align-items:center; flex-wrap:wrap; font-size:13px; color:var(--ink-soft);}
+  .table-scroll{overflow-x:auto;}
+  .table-scroll table{min-width:640px;}
+  tfoot td{font-weight:700; border-top:2px solid var(--line); border-bottom:none;}
+  .chip{display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600; white-space:nowrap;}
+  .chip-green{background:var(--sage-soft); color:#3F6B49;}
+  .chip-amber{background:#FBF0D9; color:#8A5E0A;}
+  .chip-red{background:#F7E2DA; color:#8E3A1B;}
+  .chip-grey{background:#EEEAE0; color:var(--ink-soft);}
+  .qty-in{color:#3F6B49; font-weight:600;}
+  .qty-out{color:var(--rust); font-weight:600;}
+  .subtle{color:var(--ink-soft); font-size:12px;}
+  .signin-form{display:flex; flex-direction:column; gap:10px; max-width:320px;}
+  .btn{background:var(--ink); color:#fff; border:none; border-radius:999px; padding:10px 20px; font-family:'Inter',sans-serif;
+       font-weight:600; font-size:14px; cursor:pointer;}
+  .btn:disabled{opacity:.6; cursor:default;}
+  .btn-ghost{background:none; color:var(--ink); border:1px solid var(--line);}
+  .form-error{color:var(--rust); font-size:13.5px; margin:0; min-height:1em;}
+  .form-error-banner{background:#FBEFE3; border:1px solid #E9CBA0; color:#7A4A12; border-radius:6px; padding:12px 14px; font-size:13.5px; margin-bottom:18px;}
+  .load-more{display:block; margin:14px auto 0;}
 </style>
 </head>
 <body>
@@ -83,8 +122,15 @@
     <code>&lt;script&gt;</code> section.
   </div>
 
-  <h1>Cost Dashboard</h1>
-  <p class="sub">Read-only live view of the feeding records. Anyone with this link can see it — no sign-in needed.</p>
+  <h1>Dashboard</h1>
+  <p class="sub">Costs and wastage are a read-only live view — anyone with this link can see them. Stock, invoices and prices need a staff sign-in.</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab active" id="tab-costs" role="tab">Costs &amp; wastage</button>
+    <button class="tab" id="tab-stock" role="tab">Stock</button>
+  </div>
+
+  <div id="costs-view">
 
   <div class="filters">
     <div class="filter-field">
@@ -185,17 +231,120 @@
     <div class="kpi-row">
       <div class="kpi"><div class="label">Wastage reports</div><div class="value" id="kpi-wastage-count">—</div></div>
       <div class="kpi"><div class="label">Est. packets wasted</div><div class="value" id="kpi-wastage-packets">—</div></div>
-      <div class="kpi"><div class="label">Est. cost wasted</div><div class="value" id="kpi-wastage-cost">—</div><div class="note">approx., using avg cost/packet per product</div></div>
+      <div class="kpi"><div class="label">Est. cost wasted</div><div class="value" id="kpi-wastage-cost">—</div><div class="note">approx. — exact pack cost when a pack size was reported</div></div>
     </div>
     <canvas id="wastage-chart"></canvas>
     <table id="wastage-table" style="margin-top:18px;">
-      <thead><tr><th>Brand</th><th>Flavor</th><th class="num">Reports</th><th class="num">Est. packets</th><th class="num">Est. cost</th></tr></thead>
+      <thead><tr><th>Brand</th><th>Flavor</th><th class="num">Pack</th><th class="num">Reports</th><th class="num">Est. packets</th><th class="num">Est. cost</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
   <p class="empty-state" id="wastage-empty" style="display:none;">No wastage reported in this range.</p>
 
   <div class="empty-state" id="empty-state" style="display:none;">No feeding data in this range yet.</div>
+
+  </div><!-- /costs-view -->
+
+  <div id="stock-view" style="display:none;">
+    <div class="panel" id="stock-signin">
+      <h2>Staff sign in</h2>
+      <p class="desc">Stock, invoices and prices are visible to signed-in staff only.</p>
+      <form id="stock-signin-form" class="signin-form">
+        <input type="email" id="stock-email" autocomplete="username" placeholder="Email" required>
+        <input type="password" id="stock-password" autocomplete="current-password" placeholder="Password" required>
+        <button class="btn" type="submit" id="stock-signin-btn">Sign in</button>
+        <p class="form-error" id="stock-signin-error"></p>
+      </form>
+    </div>
+
+    <div id="stock-app" style="display:none;">
+      <div class="stock-bar">
+        <div class="subtabs">
+          <button class="subtab active" data-sub="onhand">Stock on hand</button>
+          <button class="subtab" data-sub="purchases">Purchases</button>
+          <button class="subtab" data-sub="ledger">Stock ledger</button>
+        </div>
+        <div class="stock-user"><span id="stock-user-email"></span> &middot; <a href="#" id="stock-refresh">refresh</a> &middot; <a href="#" id="stock-signout">sign out</a></div>
+      </div>
+      <div class="form-error-banner" id="stock-error" style="display:none;"></div>
+
+      <!-- ===== Stock on hand ===== -->
+      <div id="sub-onhand">
+        <div class="kpi-row">
+          <div class="kpi"><div class="label">Items in stock</div><div class="value" id="sk-items">—</div><div class="note" id="sk-items-note"></div></div>
+          <div class="kpi"><div class="label">Packets on hand</div><div class="value" id="sk-packets">—</div></div>
+          <div class="kpi"><div class="label">Stock value (est.)</div><div class="value" id="sk-value">—</div><div class="note" id="sk-value-note">on hand × avg purchase price, before GST</div></div>
+          <div class="kpi"><div class="label">Needs attention</div><div class="value" id="sk-attn">—</div><div class="note" id="sk-attn-note"></div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Stock on hand</h2>
+            <div class="head-tools">
+              <input type="search" id="sk-search" placeholder="Search item…">
+              <label><input type="checkbox" id="sk-show-inactive"> show discontinued</label>
+            </div>
+          </div>
+          <p class="desc">Packets received, less packets fed and wasted — straight from the stock ledger. “Days left” uses the last 30 days of use.</p>
+          <div class="table-scroll">
+            <table id="onhand-table">
+              <thead><tr><th>Item</th><th class="num">Pack</th><th class="num">Purchased</th><th class="num">Fed</th><th class="num">Wasted</th><th class="num">Adjusted</th><th class="num">On hand</th><th class="num">Avg cost</th><th class="num">Value</th><th class="num">Use / day</th><th class="num">Days left</th><th>Status</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="empty-state" id="onhand-empty" style="display:none;">No items match.</p>
+        </div>
+      </div>
+
+      <!-- ===== Purchases ===== -->
+      <div id="sub-purchases" style="display:none;">
+        <div class="filters">
+          <div class="filter-field"><label for="pur-range">Date range</label>
+            <select id="pur-range"><option value="month">This month</option><option value="90" selected>Last 90 days</option><option value="year">This year</option><option value="all">All time</option><option value="custom">Custom range</option></select></div>
+          <div class="custom-dates" id="pur-custom"><div class="filter-field"><label for="pur-from">From</label><input type="date" id="pur-from"></div><div class="filter-field"><label for="pur-to">To</label><input type="date" id="pur-to"></div></div>
+          <div class="filter-field"><label for="pur-item">Item</label><select id="pur-item"><option value="">All items</option></select></div>
+          <div class="filter-field"><label for="pur-view">Show</label><select id="pur-view"><option value="lines">Invoice lines</option><option value="invoices">By invoice</option></select></div>
+          <div class="filter-field"><label>&nbsp;</label><button class="btn btn-ghost" id="pur-csv">Download CSV</button></div>
+        </div>
+        <div class="kpi-row">
+          <div class="kpi"><div class="label">Invoices</div><div class="value" id="pu-invoices">—</div></div>
+          <div class="kpi"><div class="label">Packets purchased</div><div class="value" id="pu-packets">—</div></div>
+          <div class="kpi"><div class="label">GST</div><div class="value" id="pu-gst">—</div></div>
+          <div class="kpi"><div class="label">Total incl. GST</div><div class="value" id="pu-total">—</div><div class="note" id="pu-sub"></div></div>
+        </div>
+        <div class="panel">
+          <h2>Purchase register</h2>
+          <p class="desc" id="pur-desc">Every stock receipt, newest first.</p>
+          <div class="table-scroll"><table id="pur-table"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+          <p class="empty-state" id="pur-empty" style="display:none;">No purchases in this range.</p>
+        </div>
+      </div>
+
+      <!-- ===== Stock ledger ===== -->
+      <div id="sub-ledger" style="display:none;">
+        <div class="filters">
+          <div class="filter-field"><label for="led-range">Date range</label>
+            <select id="led-range"><option value="month">This month</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option><option value="year">This year</option><option value="all">All time</option><option value="custom">Custom range</option></select></div>
+          <div class="custom-dates" id="led-custom"><div class="filter-field"><label for="led-from">From</label><input type="date" id="led-from"></div><div class="filter-field"><label for="led-to">To</label><input type="date" id="led-to"></div></div>
+          <div class="filter-field"><label for="led-item">Item</label><select id="led-item"><option value="">All items</option></select></div>
+          <div class="filter-field"><label for="led-type">Type</label>
+            <select id="led-type"><option value="">All movements</option><option value="PURCHASE">Purchases</option><option value="FEED">Feeds</option><option value="WASTAGE">Wastage</option><option value="ADJUSTMENT">Adjustments</option></select></div>
+          <div class="filter-field"><label>&nbsp;</label><button class="btn btn-ghost" id="led-csv">Download CSV</button></div>
+        </div>
+        <div class="panel">
+          <h2>Stock ledger</h2>
+          <p class="desc">Every movement in and out, with the running balance for that item. Deleted entries appear as reversals — nothing is ever erased.</p>
+          <div class="table-scroll">
+            <table id="led-table">
+              <thead><tr><th>Date</th><th>Time</th><th>Type</th><th>Item</th><th class="num">Pack</th><th class="num">Change</th><th class="num">Balance</th><th>Reference</th><th>By</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="empty-state" id="led-empty" style="display:none;">No movements in this range.</p>
+          <button class="btn btn-ghost load-more" id="led-more" style="display:none;">Load more</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -226,7 +375,7 @@ function showConfigWarning(html, isNote){
   el.style.display = "block";
   el.innerHTML = isNote ? html : `<strong>Couldn't load data:</strong> ${html}`;
 }
-function money(n){ return "₹" + (Math.round(n * 100) / 100).toLocaleString(undefined,{minimumFractionDigits:0, maximumFractionDigits:2}); }
+function money(n){ return "₹" + (Math.round(n * 100) / 100).toLocaleString("en-IN",{minimumFractionDigits:0, maximumFractionDigits:2}); }
 
 // Read-only, no sign-in: the public key can only SELECT from cats, brands,
 // wastage and the feed_log_public view (see supabase-schema.sql).
@@ -264,7 +413,7 @@ async function loadAll(){
     sbGetAll("cats", "select=name&order=sort_order.asc,name.asc"),
     sbGetAll("brands", "select=brand,flavor,pack_size_grams,cost_per_packet,active&order=id.asc"),
     sbGetAll("feed_log_public", "select=log_date,cat,brand,flavor,pack_size,packets,cost_per_packet,total_cost&order=id.asc"),
-    sbGetAll("wastage", "select=log_date,log_time,brand,flavor,wasted_quantity&order=id.asc")
+    sbGetAll("wastage", "select=log_date,log_time,brand,flavor,pack_size,wasted_quantity&order=id.asc")
   ]);
 
   allProducts = brandRows.map(r => ({
@@ -289,6 +438,7 @@ async function loadAll(){
   wastageLog = wastageRows
     .map(r => ({
       date: parseLogDate(r.log_date), time: r.log_time, brand: r.brand, flavor: r.flavor || "",
+      packSize: r.pack_size === null || r.pack_size === undefined ? null : Number(r.pack_size),
       amount: r.wasted_quantity, fraction: WASTAGE_FRACTIONS[r.wasted_quantity] ?? 0
     }))
     .filter(e => !!e.date);
@@ -324,7 +474,7 @@ function renderValueTable(){
     .forEach(p => {
       const perGram = p.packSize ? money(p.cost / p.packSize) : "—";
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${p.brand}</td><td>${p.flavor || "—"}</td><td class="num">${p.packSize}g</td><td class="num">${money(p.cost)}</td><td class="num">${perGram}</td>`;
+      tr.innerHTML = `<td>${esc(p.brand)}</td><td>${esc(p.flavor) || "—"}</td><td class="num">${p.packSize}g</td><td class="num">${money(p.cost)}</td><td class="num">${perGram}</td>`;
       tbody.appendChild(tr);
     });
 }
@@ -348,6 +498,15 @@ function avgCostForProduct(brand, flavor){
   const matches = allProducts.filter(p => p.brand === brand && p.flavor === flavor);
   if(!matches.length) return 0;
   return matches.reduce((s,p) => s + p.cost, 0) / matches.length;
+}
+
+// Exact when the report names a pack size; otherwise (older reports) an average across pack sizes.
+function wastageUnitCost(e){
+  if(e.packSize){
+    const exact = allProducts.find(p => p.brand === e.brand && p.flavor === e.flavor && p.packSize === e.packSize);
+    if(exact) return exact.cost;
+  }
+  return avgCostForProduct(e.brand, e.flavor);
 }
 
 function filteredWastage(){
@@ -374,9 +533,9 @@ function renderWastage(){
 
   const byProduct = {};
   entries.forEach(e => {
-    const key = `${e.brand}|||${e.flavor}`;
-    const avgCost = avgCostForProduct(e.brand, e.flavor);
-    if(!byProduct[key]) byProduct[key] = { brand: e.brand, flavor: e.flavor, reports: 0, packets: 0, cost: 0 };
+    const key = `${e.brand}|||${e.flavor}|||${e.packSize ?? ""}`;
+    const avgCost = wastageUnitCost(e);
+    if(!byProduct[key]) byProduct[key] = { brand: e.brand, flavor: e.flavor, packSize: e.packSize, reports: 0, packets: 0, cost: 0 };
     byProduct[key].reports += 1;
     byProduct[key].packets += e.fraction;
     byProduct[key].cost += e.fraction * avgCost;
@@ -395,7 +554,7 @@ function renderWastage(){
   tbody.innerHTML = "";
   rows.forEach(r => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${r.brand}</td><td>${r.flavor || "—"}</td><td class="num">${r.reports}</td><td class="num">${r.packets.toFixed(2)}</td><td class="num">${money(r.cost)}</td>`;
+    tr.innerHTML = `<td>${esc(r.brand)}</td><td>${esc(r.flavor) || "—"}</td><td class="num">${r.packSize ? esc(r.packSize) + "g" : "—"}</td><td class="num">${r.reports}</td><td class="num">${r.packets.toFixed(2)}</td><td class="num">${money(r.cost)}</td>`;
     tbody.appendChild(tr);
   });
 
@@ -403,7 +562,7 @@ function renderWastage(){
   wastageChart = new Chart(document.getElementById("wastage-chart"), {
     type: "bar",
     data: {
-      labels: rows.map(r => `${r.brand}${r.flavor ? " " + r.flavor : ""}`),
+      labels: rows.map(r => `${r.brand}${r.flavor ? " " + r.flavor : ""}${r.packSize ? " (" + r.packSize + "g)" : ""}`),
       datasets: [{ label: "Est. cost wasted", data: rows.map(r => r.cost), backgroundColor: rows.map((_,i)=>PALETTE[i%PALETTE.length]) }]
     },
     options: { plugins:{legend:{display:false}}, indexAxis:'y', scales:{ x:{ ticks:{ callback:v=>"₹"+v } } } }
@@ -501,7 +660,7 @@ function render(){
   Object.entries(byCat).sort((a,b)=>b[1].spend-a[1].spend).forEach(([cat,d]) => {
     const perDay = d.spend / days;
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${cat}</td><td class="num">${d.packets}</td><td class="num">${money(d.spend)}</td><td class="num">${money(perDay)}</td><td class="num">${money(perDay*30)}</td><td class="num">${money(perDay*365)}</td>`;
+    tr.innerHTML = `<td>${esc(cat)}</td><td class="num">${d.packets}</td><td class="num">${money(d.spend)}</td><td class="num">${money(perDay)}</td><td class="num">${money(perDay*30)}</td><td class="num">${money(perDay*365)}</td>`;
     tbody.appendChild(tr);
   });
 
@@ -550,6 +709,405 @@ document.getElementById("range").addEventListener("change", (e) => {
 ["start-date","end-date","cat-filter","granularity","sim-brand"].forEach(id => {
   document.getElementById(id).addEventListener("change", render);
 });
+
+/* =====================================================================
+   STOCK MODULE — signed-in staff only (the public key can't read any of it)
+   ===================================================================== */
+const SESSION_KEY = "feedingchart_sb_session";   // same key as the logger → one sign-in covers both pages
+const LOW_STOCK_DAYS = 7;
+const LEDGER_PAGE = 200;
+let session = null;
+class AuthError extends Error {}
+const byId = (id) => document.getElementById(id);
+function esc(s){
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+}
+
+/* ---------- Auth ---------- */
+async function authRequest(grantType, body){
+  const res = await fetch(`${CONFIG.SUPABASE_URL}/auth/v1/token?grant_type=${grantType}`, {
+    method: "POST",
+    headers: { apikey: CONFIG.SUPABASE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok) throw new Error(data.error_description || data.msg || data.message || `Sign-in failed (${res.status})`);
+  return data;
+}
+function setSession(data){
+  session = {
+    access_token: data.access_token, refresh_token: data.refresh_token,
+    expires_at: Date.now() + (data.expires_in || 3600) * 1000,
+    email: (data.user && data.user.email) || (session && session.email) || ""
+  };
+  try{ localStorage.setItem(SESSION_KEY, JSON.stringify(session)); }catch(e){}
+}
+function clearSession(){ session = null; try{ localStorage.removeItem(SESSION_KEY); }catch(e){} }
+async function refreshSession(){
+  if(!session || !session.refresh_token) throw new Error("No session");
+  setSession(await authRequest("refresh_token", { refresh_token: session.refresh_token }));
+}
+async function authGet(pathAndQuery, retry = true){
+  if(!session) throw new AuthError("Please sign in.");
+  if(Date.now() > session.expires_at - 60000){
+    try{ await refreshSession(); }catch(e){ clearSession(); throw new AuthError("Session expired — please sign in again."); }
+  }
+  const res = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/${pathAndQuery}`, {
+    headers: { apikey: CONFIG.SUPABASE_KEY, Authorization: `Bearer ${session.access_token}` }
+  });
+  if(res.status === 401 && retry){
+    try{ await refreshSession(); }catch(e){ clearSession(); throw new AuthError("Session expired — please sign in again."); }
+    return authGet(pathAndQuery, false);
+  }
+  if(!res.ok){
+    const err = await res.json().catch(() => ({}));
+    if(res.status === 401 || res.status === 403) throw new Error(err.message || "Not allowed — this account may not be approved staff.");
+    throw new Error((err.message || `Request failed (${res.status})`) + (res.status === 404 || res.status === 400 ? " — has supabase-stock-migration.sql been run?" : ""));
+  }
+  return res.json();
+}
+async function authGetAll(pathAndQuery){
+  const out = [];
+  for(let offset = 0; ; offset += 1000){
+    const rows = await authGet(`${pathAndQuery}&limit=1000&offset=${offset}`);
+    out.push(...rows);
+    if(rows.length < 1000) break;
+  }
+  return out;
+}
+
+/* ---------- Date / number helpers (everything in India time) ---------- */
+function istToday(){
+  return new Intl.DateTimeFormat("en-CA", { timeZone:"Asia/Kolkata", year:"numeric", month:"2-digit", day:"2-digit" }).format(new Date());
+}
+function addDays(ymd, n){ const d = new Date(ymd + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function daysBetween(a, b){ return Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000); }
+function fmtDate(ymd){
+  if(!ymd) return "—";
+  return new Date(ymd + "T00:00:00Z").toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric", timeZone:"UTC" });
+}
+function fmtTime(ts){
+  return new Date(ts).toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit", hour12:true, timeZone:"Asia/Kolkata" }).toUpperCase();
+}
+function qty(n){ const v = Math.round(Number(n) * 100) / 100; return String(Object.is(v, -0) ? 0 : v); }
+function signedQty(n){ const v = Math.round(Number(n) * 100) / 100; return (v > 0 ? "+" : "") + v; }
+function itemName(brand, flavor){ return esc(brand) + (flavor ? " — " + esc(flavor) : ""); }
+function rangeFor(prefix){
+  const mode = byId(prefix + "-range").value, today = istToday();
+  if(mode === "month") return { from: today.slice(0, 8) + "01", to: today };
+  if(mode === "30") return { from: addDays(today, -29), to: today };
+  if(mode === "90") return { from: addDays(today, -89), to: today };
+  if(mode === "year") return { from: today.slice(0, 5) + "01-01", to: today };
+  if(mode === "custom") return { from: byId(prefix + "-from").value || null, to: byId(prefix + "-to").value || null };
+  return { from: null, to: null };
+}
+function dateFilter(col, r){ return (r.from ? `&${col}=gte.${r.from}` : "") + (r.to ? `&${col}=lte.${r.to}` : ""); }
+
+/* ---------- CSV ---------- */
+function toCsv(headers, rows){
+  const cell = (v) => {
+    let s = v === null || v === undefined ? "" : String(v);
+    // Stop spreadsheet apps treating text as a formula (numbers are left alone)
+    if(typeof v === "string" && /^[=+\-@\t\r]/.test(s) && isNaN(Number(s))) s = "'" + s;
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  return [headers, ...rows].map(r => r.map(cell).join(",")).join("\r\n");
+}
+function downloadCsv(name, csv){
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ---------- Tabs ---------- */
+let stockReady = false;
+function showTab(name){
+  byId("costs-view").style.display = name === "costs" ? "block" : "none";
+  byId("stock-view").style.display = name === "stock" ? "block" : "none";
+  byId("tab-costs").classList.toggle("active", name === "costs");
+  byId("tab-stock").classList.toggle("active", name === "stock");
+  try{ history.replaceState(null, "", name === "stock" ? "#stock" : location.pathname + location.search); }catch(e){}
+  if(name === "stock") openStock();
+}
+byId("tab-costs").addEventListener("click", () => showTab("costs"));
+byId("tab-stock").addEventListener("click", () => showTab("stock"));
+
+function showStockSignIn(message){
+  stockReady = false;
+  byId("stock-app").style.display = "none";
+  byId("stock-signin").style.display = "block";
+  byId("stock-signin-error").textContent = message || "";
+}
+function showStockError(msg){
+  const el = byId("stock-error");
+  el.style.display = msg ? "block" : "none";
+  el.textContent = msg || "";
+}
+async function openStock(){
+  if(!session){
+    try{ const raw = localStorage.getItem(SESSION_KEY); if(raw) session = JSON.parse(raw); }catch(e){}
+  }
+  if(!session){ showStockSignIn(""); return; }
+  if(stockReady) return;
+  await enterStock();
+}
+async function enterStock(){
+  byId("stock-signin").style.display = "none";
+  byId("stock-app").style.display = "block";
+  byId("stock-user-email").textContent = session.email || "";
+  showStockError("");
+  try{
+    await loadOnHand();
+    stockReady = true;
+    await loadSubView(currentSub);
+  }catch(err){
+    if(err instanceof AuthError){ showStockSignIn(err.message); return; }
+    showStockError(err.message);
+  }
+}
+
+byId("stock-signin-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = byId("stock-signin-btn");
+  btn.disabled = true; byId("stock-signin-error").textContent = "";
+  try{
+    setSession(await authRequest("password", { email: byId("stock-email").value.trim(), password: byId("stock-password").value }));
+    byId("stock-password").value = "";
+    await enterStock();
+  }catch(err){
+    if(!session) showStockSignIn(err.message); else showStockError(err.message);
+  }finally{ btn.disabled = false; }
+});
+byId("stock-signout").addEventListener("click", (e) => {
+  e.preventDefault(); clearSession(); stkOnHand = []; stkPurchases = []; stkLedger = [];
+  showStockSignIn("");
+});
+byId("stock-refresh").addEventListener("click", async (e) => {
+  e.preventDefault();
+  try{ showStockError(""); await loadOnHand(); await loadSubView(currentSub); }
+  catch(err){ if(err instanceof AuthError) showStockSignIn(err.message); else showStockError(err.message); }
+});
+
+let currentSub = "onhand";
+document.querySelectorAll(".subtab").forEach(btn => btn.addEventListener("click", async () => {
+  currentSub = btn.dataset.sub;
+  document.querySelectorAll(".subtab").forEach(b => b.classList.toggle("active", b === btn));
+  ["onhand", "purchases", "ledger"].forEach(s => { byId("sub-" + s).style.display = s === currentSub ? "block" : "none"; });
+  try{ showStockError(""); await loadSubView(currentSub); }
+  catch(err){ if(err instanceof AuthError) showStockSignIn(err.message); else showStockError(err.message); }
+}));
+async function loadSubView(sub){
+  if(sub === "purchases") await loadPurchases();
+  else if(sub === "ledger") await loadLedger(true);
+}
+
+/* ---------- Stock on hand ---------- */
+let stkOnHand = [];
+async function loadOnHand(){
+  stkOnHand = await authGetAll("stock_on_hand?select=*&order=brand.asc,flavor.asc,pack_size_grams.asc");
+  fillItemFilters();
+  renderOnHand();
+}
+function stkDailyUse(r){
+  if(!r.first_txn_date) return 0;
+  const windowDays = Math.min(30, Math.max(1, daysBetween(r.first_txn_date, istToday()) + 1));
+  return Number(r.used_30d) / windowDays;
+}
+function stkStatus(r){
+  const onHand = Number(r.on_hand), daily = stkDailyUse(r);
+  if(onHand < 0) return { key: "check", rank: 0, label: "Check count", cls: "chip-red" };
+  if(onHand === 0){
+    return r.first_txn_date ? { key: "out", rank: 1, label: "Out of stock", cls: "chip-red" }
+                            : { key: "none", rank: 4, label: "No stock yet", cls: "chip-grey" };
+  }
+  if(daily > 0 && onHand / daily < LOW_STOCK_DAYS) return { key: "low", rank: 2, label: "Low", cls: "chip-amber" };
+  return { key: "ok", rank: 3, label: "OK", cls: "chip-green" };
+}
+function fillItemFilters(){
+  ["pur-item", "led-item"].forEach(id => {
+    const sel = byId(id), keep = sel.value;
+    sel.innerHTML = '<option value="">All items</option>' + stkOnHand
+      .filter(r => r.active || Number(r.purchased) || Number(r.fed) || Number(r.wasted))
+      .map(r => `<option value="${esc(r.product_id)}">${itemName(r.brand, r.flavor)} · ${esc(r.pack_size_grams)}g</option>`).join("");
+    sel.value = keep;
+  });
+}
+function renderOnHand(){
+  const active = stkOnHand.filter(r => r.active);
+  const inStock = active.filter(r => Number(r.on_hand) > 0);
+  let packets = 0, value = 0, unpriced = 0;
+  inStock.forEach(r => {
+    packets += Number(r.on_hand);
+    if(r.avg_cost === null || r.avg_cost === undefined) unpriced++; else value += Number(r.on_hand) * Number(r.avg_cost);
+  });
+  const attention = stkOnHand.filter(r => (r.active || Number(r.on_hand) !== 0) && ["check", "out", "low"].includes(stkStatus(r).key));
+  byId("sk-items").textContent = inStock.length;
+  byId("sk-items-note").textContent = `of ${active.length} active item${active.length === 1 ? "" : "s"}`;
+  byId("sk-packets").textContent = qty(packets);
+  byId("sk-value").textContent = money(value);
+  byId("sk-value-note").textContent = unpriced ? `${unpriced} item${unpriced === 1 ? "" : "s"} in stock with no purchase price yet` : "on hand × avg purchase price, before GST";
+  byId("sk-attn").textContent = attention.length;
+  const counts = { check: 0, out: 0, low: 0 };
+  attention.forEach(r => counts[stkStatus(r).key]++);
+  byId("sk-attn-note").textContent = attention.length
+    ? [counts.low && `${counts.low} low`, counts.out && `${counts.out} out`, counts.check && `${counts.check} to check`].filter(Boolean).join(" · ")
+    : "nothing to chase";
+
+  const term = byId("sk-search").value.trim().toLowerCase(), showInactive = byId("sk-show-inactive").checked;
+  const rows = stkOnHand
+    .filter(r => r.active || Number(r.on_hand) !== 0 || showInactive)
+    .filter(r => !term || `${r.brand} ${r.flavor} ${r.pack_size_grams}g`.toLowerCase().includes(term))
+    .map(r => ({ r, st: stkStatus(r) }))
+    .sort((a, b) => a.st.rank - b.st.rank || (a.r.brand + a.r.flavor).localeCompare(b.r.brand + b.r.flavor));
+  const tbody = document.querySelector("#onhand-table tbody");
+  tbody.innerHTML = "";
+  byId("onhand-empty").style.display = rows.length ? "none" : "block";
+  rows.forEach(({ r, st }) => {
+    const onHand = Number(r.on_hand), daily = stkDailyUse(r);
+    const val = r.avg_cost === null || r.avg_cost === undefined ? null : Math.max(onHand, 0) * Number(r.avg_cost);
+    const daysLeft = onHand > 0 && daily > 0 ? Math.floor(onHand / daily) : null;
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td>${itemName(r.brand, r.flavor)}${r.active ? "" : ' <span class="subtle">(discontinued)</span>'}</td>` +
+      `<td class="num">${esc(r.pack_size_grams)}g</td>` +
+      `<td class="num">${qty(r.purchased)}</td><td class="num">${qty(r.fed)}</td><td class="num">${qty(r.wasted)}</td>` +
+      `<td class="num">${Number(r.adjusted) ? signedQty(r.adjusted) : "—"}</td>` +
+      `<td class="num"><strong>${qty(r.on_hand)}</strong></td>` +
+      `<td class="num">${r.avg_cost === null || r.avg_cost === undefined ? "—" : money(Number(r.avg_cost))}</td>` +
+      `<td class="num">${val === null ? "—" : money(val)}</td>` +
+      `<td class="num">${daily > 0 ? qty(daily) : "—"}</td>` +
+      `<td class="num">${daysLeft === null ? "—" : daysLeft}</td>` +
+      `<td><span class="chip ${st.cls}">${st.label}</span></td>`;
+    tbody.appendChild(tr);
+  });
+}
+byId("sk-search").addEventListener("input", renderOnHand);
+byId("sk-show-inactive").addEventListener("change", renderOnHand);
+
+/* ---------- Purchases ---------- */
+let stkPurchases = [], purSeq = 0;
+async function loadPurchases(){
+  const token = ++purSeq, r = rangeFor("pur"), prod = byId("pur-item").value;
+  const q = "stocks?select=id,purchase_date,invoice_number,product_id,brand,flavor,pack_size_grams,quantity,item_price,gst_rate,gst_amount,line_total,created_by" +
+    dateFilter("purchase_date", r) + (prod ? `&product_id=eq.${encodeURIComponent(prod)}` : "") + "&order=purchase_date.desc,id.desc";
+  const rows = await authGetAll(q);
+  if(token !== purSeq) return;          // a newer filter change superseded this request
+  stkPurchases = rows;
+  renderPurchases();
+}
+function purchaseInvoices(rows){
+  const map = new Map();
+  rows.forEach(l => {
+    const g = map.get(l.invoice_number) || { invoice: l.invoice_number, date: l.purchase_date, items: 0, qty: 0, sub: 0, gst: 0, total: 0, by: l.created_by };
+    g.items++; g.qty += Number(l.quantity); g.gst += Number(l.gst_amount); g.total += Number(l.line_total);
+    g.sub += Number(l.line_total) - Number(l.gst_amount);
+    if(l.purchase_date > g.date) g.date = l.purchase_date;
+    map.set(l.invoice_number, g);
+  });
+  return [...map.values()];
+}
+function renderPurchases(){
+  const rows = stkPurchases, view = byId("pur-view").value;
+  const inv = purchaseInvoices(rows);
+  const sum = (f) => rows.reduce((s, l) => s + Number(f(l)), 0);
+  const gst = sum(l => l.gst_amount), total = sum(l => l.line_total);
+  byId("pu-invoices").textContent = inv.length;
+  byId("pu-packets").textContent = qty(sum(l => l.quantity));
+  byId("pu-gst").textContent = money(gst);
+  byId("pu-total").textContent = money(total);
+  byId("pu-sub").textContent = `${money(total - gst)} before GST`;
+  byId("pur-empty").style.display = rows.length ? "none" : "block";
+  const thead = document.querySelector("#pur-table thead"), tbody = document.querySelector("#pur-table tbody"), tfoot = document.querySelector("#pur-table tfoot");
+  thead.innerHTML = tbody.innerHTML = tfoot.innerHTML = "";
+  if(!rows.length) return;
+  if(view === "invoices"){
+    byId("pur-desc").textContent = "One row per invoice, newest first.";
+    thead.innerHTML = '<tr><th>Date</th><th>Invoice</th><th class="num">Items</th><th class="num">Packets</th><th class="num">Subtotal</th><th class="num">GST</th><th class="num">Total</th><th>Received by</th></tr>';
+    inv.forEach(g => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${fmtDate(g.date)}</td><td>${esc(g.invoice)}</td><td class="num">${g.items}</td><td class="num">${qty(g.qty)}</td><td class="num">${money(g.sub)}</td><td class="num">${money(g.gst)}</td><td class="num">${money(g.total)}</td><td class="subtle">${esc(g.by)}</td>`;
+      tbody.appendChild(tr);
+    });
+    tfoot.innerHTML = `<tr><td colspan="2">Total</td><td class="num">${rows.length}</td><td class="num">${qty(sum(l => l.quantity))}</td><td class="num">${money(total - gst)}</td><td class="num">${money(gst)}</td><td class="num">${money(total)}</td><td></td></tr>`;
+  } else {
+    byId("pur-desc").textContent = "Every stock receipt line, newest first.";
+    thead.innerHTML = '<tr><th>Date</th><th>Invoice</th><th>Item</th><th class="num">Pack</th><th class="num">Qty</th><th class="num">Price</th><th class="num">GST %</th><th class="num">GST</th><th class="num">Line total</th></tr>';
+    rows.forEach(l => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${fmtDate(l.purchase_date)}</td><td>${esc(l.invoice_number)}</td><td>${itemName(l.brand, l.flavor)}</td><td class="num">${esc(l.pack_size_grams)}g</td><td class="num">${qty(l.quantity)}</td><td class="num">${money(Number(l.item_price))}</td><td class="num">${qty(l.gst_rate)}%</td><td class="num">${money(Number(l.gst_amount))}</td><td class="num">${money(Number(l.line_total))}</td>`;
+      tbody.appendChild(tr);
+    });
+    tfoot.innerHTML = `<tr><td colspan="4">Total</td><td class="num">${qty(sum(l => l.quantity))}</td><td></td><td></td><td class="num">${money(gst)}</td><td class="num">${money(total)}</td></tr>`;
+  }
+}
+["pur-range", "pur-from", "pur-to", "pur-item"].forEach(id => byId(id).addEventListener("change", () => {
+  byId("pur-custom").classList.toggle("active", byId("pur-range").value === "custom");
+  loadPurchases().catch(handleStockErr);
+}));
+byId("pur-view").addEventListener("change", renderPurchases);
+byId("pur-csv").addEventListener("click", () => {
+  const rows = stkPurchases;
+  downloadCsv(`purchases-${istToday()}.csv`, toCsv(
+    ["Date", "Invoice", "Brand", "Flavor", "Pack size (g)", "Quantity", "Item price", "GST %", "GST amount", "Line total", "Received by"],
+    rows.map(l => [l.purchase_date, l.invoice_number, l.brand, l.flavor, Number(l.pack_size_grams), Number(l.quantity), Number(l.item_price), Number(l.gst_rate), Number(l.gst_amount), Number(l.line_total), l.created_by])));
+});
+
+/* ---------- Stock ledger ---------- */
+let stkLedger = [], ledDone = true, ledSeq = 0;
+const LEDGER_TYPES = { PURCHASE: "Purchase", FEED: "Fed", WASTAGE: "Wastage", ADJUSTMENT: "Adjustment" };
+function ledgerQuery(){
+  const r = rangeFor("led"), prod = byId("led-item").value, type = byId("led-type").value;
+  return "stock_ledger?select=id,txn_at,txn_date,txn_type,is_reversal,product_id,brand,flavor,pack_size_grams,quantity_change,balance,reference,note,created_by" +
+    dateFilter("txn_date", r) + (prod ? `&product_id=eq.${encodeURIComponent(prod)}` : "") + (type ? `&txn_type=eq.${type}` : "") + "&order=id.desc";
+}
+async function loadLedger(reset){
+  const token = ++ledSeq;
+  if(reset){ stkLedger = []; ledDone = false; }
+  const rows = await authGet(`${ledgerQuery()}&limit=${LEDGER_PAGE}&offset=${stkLedger.length}`);
+  if(token !== ledSeq) return;
+  stkLedger = stkLedger.concat(rows);
+  ledDone = rows.length < LEDGER_PAGE;
+  renderLedger();
+}
+function renderLedger(){
+  const tbody = document.querySelector("#led-table tbody");
+  tbody.innerHTML = "";
+  byId("led-empty").style.display = stkLedger.length ? "none" : "block";
+  byId("led-more").style.display = stkLedger.length && !ledDone ? "block" : "none";
+  stkLedger.forEach(h => {
+    const change = Number(h.quantity_change);
+    const type = (LEDGER_TYPES[h.txn_type] || h.txn_type) + (h.is_reversal ? " (reversal)" : "");
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td>${fmtDate(h.txn_date)}</td><td class="subtle">${fmtTime(h.txn_at)}</td>` +
+      `<td><span class="chip ${h.is_reversal ? "chip-grey" : change > 0 ? "chip-green" : "chip-amber"}">${esc(type)}</span></td>` +
+      `<td>${itemName(h.brand, h.flavor)}</td><td class="num">${h.pack_size_grams ? esc(h.pack_size_grams) + "g" : "—"}</td>` +
+      `<td class="num ${change > 0 ? "qty-in" : "qty-out"}">${signedQty(change)}</td>` +
+      `<td class="num">${h.balance === null || h.balance === undefined ? "—" : qty(h.balance)}</td>` +
+      `<td>${esc(h.reference)}${h.note ? `<div class="subtle">${esc(h.note)}</div>` : ""}</td><td class="subtle">${esc(h.created_by)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+["led-range", "led-from", "led-to", "led-item", "led-type"].forEach(id => byId(id).addEventListener("change", () => {
+  byId("led-custom").classList.toggle("active", byId("led-range").value === "custom");
+  loadLedger(true).catch(handleStockErr);
+}));
+byId("led-more").addEventListener("click", () => loadLedger(false).catch(handleStockErr));
+byId("led-csv").addEventListener("click", async () => {
+  try{
+    const rows = await authGetAll(ledgerQuery());      // everything that matches the filters, not just what's on screen
+    downloadCsv(`stock-ledger-${istToday()}.csv`, toCsv(
+      ["Date", "Time", "Type", "Reversal", "Brand", "Flavor", "Pack size (g)", "Change", "Balance", "Reference", "Note", "By"],
+      rows.map(h => [h.txn_date, fmtTime(h.txn_at), h.txn_type, h.is_reversal ? "yes" : "", h.brand, h.flavor, h.pack_size_grams === null ? "" : Number(h.pack_size_grams), Number(h.quantity_change), h.balance === null ? "" : Number(h.balance), h.reference, h.note, h.created_by])));
+  }catch(err){ handleStockErr(err); }
+});
+function handleStockErr(err){
+  if(err instanceof AuthError) showStockSignIn(err.message); else showStockError(err.message);
+}
+
+if(location.hash === "#stock") showTab("stock");
 
 window.addEventListener("load", () => {
   if(!isConfigured()){

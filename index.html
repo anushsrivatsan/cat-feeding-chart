@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>FatCats Feeding Chart</title>
+<title>Feeding Chart</title>
 <link rel="manifest" href="manifest.json" />
 <meta name="theme-color" content="#D99A1B" />
 <link rel="icon" href="icons/icon-192.png" />
@@ -113,6 +113,8 @@
   .wastage-trigger-row{
     display:flex;
     justify-content:flex-end;
+    gap:10px;
+    flex-wrap:wrap;
     margin-bottom:20px;
   }
   button.wastage-trigger{
@@ -294,6 +296,34 @@
   #signin-error{color:var(--rust); font-size:13.5px; margin:2px 0 0; min-height:1em;}
   #signin-form .g-signin-btn{justify-content:center;}
   #signin-form .g-signin-btn:disabled{opacity:.6; cursor:default;}
+
+  button.stock-trigger{color:var(--sage);}
+  button.stock-trigger:hover{background:var(--sage-soft); border-color:var(--sage);}
+  .log-form input[type=text], .log-form input[type=number], .log-form input[type=date]{
+    width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:4px;
+    font-family:'Inter',sans-serif; font-size:15px; background:var(--cream); color:var(--ink);
+  }
+  .stock-line{
+    display:grid; grid-template-columns:1fr 1fr; gap:10px 12px;
+    padding:14px 0 6px; border-top:1px solid var(--line); position:relative;
+  }
+  .stock-line .sl-item{grid-column:1 / -1; padding-right:34px;}
+  .stock-line .sl-total-box .sl-total{
+    padding:11px 0; font-family:'Fraunces',serif; font-weight:600; font-size:17px;
+  }
+  .sl-remove{
+    position:absolute; top:12px; right:0; width:28px; height:28px; border-radius:50%;
+    border:1px solid var(--line); background:none; color:var(--ink-soft); font-size:18px;
+    line-height:1; cursor:pointer;
+  }
+  .sl-remove:hover{color:var(--rust); border-color:var(--rust);}
+  button.add-line-btn{
+    background:none; border:1px dashed var(--line); border-radius:4px; color:var(--ink-soft);
+    padding:10px 14px; width:100%; font-family:'Inter',sans-serif; font-size:14px; cursor:pointer; margin-top:6px;
+  }
+  button.add-line-btn:hover{border-color:var(--sage); color:var(--sage);}
+  .stock-totals{margin-top:14px; font-size:13.5px; color:var(--ink-soft); line-height:1.6;}
+  .stock-totals strong{color:var(--ink);}
 </style>
 </head>
 <body>
@@ -312,7 +342,7 @@
   <p class="sub">Tap a cat, choose the food and packet count, and log it. Everyone can see who's been fed today.</p>
 
   <div id="signin-panel">
-    <h2>Slave sign in</h2>
+    <h2>Staff sign in</h2>
     <form id="signin-form">
       <input type="email" id="signin-email" autocomplete="username" placeholder="Email" required>
       <input type="password" id="signin-password" autocomplete="current-password" placeholder="Password" required>
@@ -325,6 +355,7 @@
     <div class="cat-grid" id="cat-grid"></div>
 
     <div class="wastage-trigger-row">
+      <button class="wastage-trigger stock-trigger" id="stock-trigger">Receive stock</button>
       <button class="wastage-trigger" id="wastage-trigger">Report wastage</button>
     </div>
 
@@ -371,6 +402,10 @@
       </div>
       <div class="field-row">
         <div>
+          <label for="wastage-pack-size">Pack size</label>
+          <select id="wastage-pack-size"></select>
+        </div>
+        <div>
           <label for="wastage-amount">Approx. wasted</label>
           <select id="wastage-amount">
             <option value="1/3 Packet">1/3 packet</option>
@@ -379,11 +414,31 @@
             <option value="Full Packet">Full packet</option>
           </select>
         </div>
-        <div></div>
       </div>
       <div class="submit-row" style="margin-top:16px;">
         <button class="log-btn" id="wastage-submit-btn">Report wastage</button>
         <button class="cancel-btn" id="wastage-cancel-btn">Cancel</button>
+      </div>
+    </div>
+
+    <div class="log-form" id="stock-form">
+      <h2>Receive stock</h2>
+      <div class="field-row">
+        <div>
+          <label for="stock-date">Invoice date</label>
+          <input type="date" id="stock-date">
+        </div>
+        <div>
+          <label for="stock-invoice">Invoice number</label>
+          <input type="text" id="stock-invoice" autocomplete="off" placeholder="e.g. INV-1042">
+        </div>
+      </div>
+      <div id="stock-lines"></div>
+      <button class="add-line-btn" id="stock-add-line" type="button">+ Add another item</button>
+      <div class="stock-totals" id="stock-totals"></div>
+      <div class="submit-row" style="margin-top:16px;">
+        <button class="log-btn" id="stock-submit-btn">Save stock receipt</button>
+        <button class="cancel-btn" id="stock-cancel-btn">Cancel</button>
       </div>
     </div>
 
@@ -582,12 +637,12 @@ async function loadAll(){
   try{
     const [catRows, brandRows] = await Promise.all([
       api("cats?select=name,photo_url&active=eq.true&order=sort_order.asc,name.asc"),
-      api("brands?select=brand,flavor,pack_size_grams,cost_per_packet&active=eq.true&order=brand.asc,flavor.asc,pack_size_grams.asc"),
+      api("brands?select=id,brand,flavor,pack_size_grams,cost_per_packet&active=eq.true&order=brand.asc,flavor.asc,pack_size_grams.asc"),
       fetchToday()
     ]);
     cats = catRows.map(r => ({ name: r.name, photo: r.photo_url || "" }));
     products = brandRows.map(r => ({
-      brand: r.brand, flavor: r.flavor || "",
+      id: r.id, brand: r.brand, flavor: r.flavor || "",
       packSize: Number(r.pack_size_grams) || 0, cost: Number(r.cost_per_packet) || 0
     }));
     renderCats();
@@ -595,6 +650,7 @@ async function loadAll(){
     populatePacketOptions();
     populateBrandOptions();
     populateWastageOptions();
+    resetStockForm();
   }catch(err){
     if(err instanceof AuthError){ showSignedOut(err.message); return; }
     showToast(err.message, true);
@@ -709,9 +765,13 @@ document.getElementById("pack-size").addEventListener("change", updateCostHint);
 document.getElementById("packets").addEventListener("change", updateCostHint);
 
 /* ---------- Log a feed ---------- */
+function closeSideForms(){
+  document.getElementById("wastage-form").classList.remove("active");
+  document.getElementById("stock-form").classList.remove("active");
+}
 function selectCat(name){
   selectedCat = name;
-  document.getElementById("wastage-form").classList.remove("active");
+  closeSideForms();
   document.querySelectorAll(".cat-card").forEach(c => c.classList.toggle("selected", c.dataset.name === name));
   document.getElementById("log-form-title").textContent = `Log a feed for ${name}`;
   document.getElementById("log-form").classList.add("active");
@@ -776,11 +836,20 @@ function populateWastageFlavorOptions(){
   const flavors = uniqueInOrder(products.filter(p => p.brand === brandName).map(p => p.flavor));
   document.getElementById("wastage-flavor").innerHTML =
     flavors.map(f => `<option value="${esc(f)}">${esc(f) || "(no flavor listed)"}</option>`).join("");
+  populateWastagePackSizeOptions();
+}
+function populateWastagePackSizeOptions(){
+  const brandName = document.getElementById("wastage-brand").value;
+  const flavorName = document.getElementById("wastage-flavor").value;
+  const sizes = uniqueInOrder(products.filter(p => p.brand === brandName && p.flavor === flavorName).map(p => p.packSize));
+  document.getElementById("wastage-pack-size").innerHTML = sizes.map(s => `<option value="${s}">${s}g</option>`).join("");
 }
 document.getElementById("wastage-brand").addEventListener("change", populateWastageFlavorOptions);
+document.getElementById("wastage-flavor").addEventListener("change", populateWastagePackSizeOptions);
 
 document.getElementById("wastage-trigger").addEventListener("click", () => {
   document.getElementById("log-form").classList.remove("active");
+  closeSideForms();
   selectedCat = null;
   document.querySelectorAll(".cat-card").forEach(c => c.classList.remove("selected"));
   document.getElementById("wastage-form").classList.add("active");
@@ -796,13 +865,152 @@ document.getElementById("wastage-submit-btn").addEventListener("click", async ()
     const brandName = document.getElementById("wastage-brand").value;
     const flavorName = document.getElementById("wastage-flavor").value;
     const amount = document.getElementById("wastage-amount").value;
+    const packSize = parseFloat(document.getElementById("wastage-pack-size").value);
+    if(!Number.isFinite(packSize)){ showToast("Choose the pack size first.", true); return; }
     await api("wastage", {
       method: "POST",
       prefer: "return=minimal",
-      body: { brand: brandName, flavor: flavorName, wasted_quantity: amount }
+      body: { brand: brandName, flavor: flavorName, pack_size: packSize, wasted_quantity: amount }
     });
-    showToast(`Reported: ${amount} of ${brandName}${flavorName ? " " + flavorName : ""} wasted.`);
+    showToast(`Reported: ${amount} of ${brandName}${flavorName ? " " + flavorName : ""} (${packSize}g) wasted.`);
     document.getElementById("wastage-form").classList.remove("active");
+  }catch(err){
+    if(err instanceof AuthError){ showSignedOut(err.message); return; }
+    showToast(err.message, true);
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+/* ---------- Receive stock (credit stock from a supplier invoice) ---------- */
+const GST_OPTIONS = [0, 5, 12, 18, 28];
+const round2 = (x) => Math.round((x + Number.EPSILON) * 100) / 100;
+const inr = (n) => "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function productLabel(p){
+  return `${p.brand} — ${p.flavor || "no flavor"} · ${p.packSize}g`;
+}
+function addStockLine(gstFromPrevious){
+  const wrap = document.createElement("div");
+  wrap.className = "stock-line";
+  wrap.innerHTML = `
+    <div class="sl-item">
+      <label>Item</label>
+      <select class="sl-product">
+        <option value="">Choose item</option>
+        ${products.map(p => `<option value="${p.id}">${esc(productLabel(p))}</option>`).join("")}
+      </select>
+    </div>
+    <div>
+      <label>Quantity (packets)</label>
+      <input type="number" class="sl-qty" min="1" step="1" inputmode="numeric" placeholder="0">
+    </div>
+    <div>
+      <label>Price per packet (₹, before GST)</label>
+      <input type="number" class="sl-price" min="0" step="0.01" inputmode="decimal" placeholder="0.00">
+    </div>
+    <div>
+      <label>GST %</label>
+      <select class="sl-gst">
+        <option value="">Select</option>
+        ${GST_OPTIONS.map(g => `<option value="${g}">${g}%</option>`).join("")}
+      </select>
+    </div>
+    <div class="sl-total-box">
+      <label>Line total (incl. GST)</label>
+      <div class="sl-total">${inr(0)}</div>
+    </div>
+    <button type="button" class="sl-remove" title="Remove this item" aria-label="Remove this item">&times;</button>`;
+  if(gstFromPrevious !== undefined && gstFromPrevious !== "") wrap.querySelector(".sl-gst").value = gstFromPrevious;
+  wrap.addEventListener("input", updateStockTotals);
+  wrap.addEventListener("change", updateStockTotals);
+  wrap.querySelector(".sl-remove").addEventListener("click", () => {
+    if(document.querySelectorAll(".stock-line").length > 1){ wrap.remove(); updateStockTotals(); }
+  });
+  document.getElementById("stock-lines").appendChild(wrap);
+  updateStockTotals();
+}
+function readStockLines(){
+  return [...document.querySelectorAll(".stock-line")].map(el => ({
+    el,
+    productId: parseInt(el.querySelector(".sl-product").value, 10) || null,
+    qty: parseFloat(el.querySelector(".sl-qty").value),
+    price: parseFloat(el.querySelector(".sl-price").value),
+    gst: el.querySelector(".sl-gst").value
+  }));
+}
+function lineAmounts(l){
+  const q = Number.isFinite(l.qty) ? l.qty : 0, pr = Number.isFinite(l.price) ? l.price : 0, g = l.gst === "" ? 0 : Number(l.gst);
+  const base = round2(q * pr), gstAmt = round2(q * pr * g / 100);
+  return { base, gstAmt, total: round2(base + gstAmt) };
+}
+function updateStockTotals(){
+  let items = 0, base = 0, gst = 0, total = 0;
+  readStockLines().forEach(l => {
+    const a = lineAmounts(l);
+    l.el.querySelector(".sl-total").textContent = inr(a.total);
+    if(l.productId){ items++; }
+    base += a.base; gst += a.gstAmt; total += a.total;
+  });
+  document.getElementById("stock-totals").innerHTML =
+    `${items} item${items===1?"":"s"} &middot; Subtotal <strong>${inr(round2(base))}</strong> &middot; GST <strong>${inr(round2(gst))}</strong> &middot; Invoice total <strong>${inr(round2(total))}</strong>` +
+    `<br><span>Estimate — the final amounts are calculated when you save.</span>`;
+}
+function resetStockForm(){
+  const today = todayStr();
+  const d = document.getElementById("stock-date");
+  d.value = today; d.max = today;
+  document.getElementById("stock-invoice").value = "";
+  document.getElementById("stock-lines").innerHTML = "";
+  addStockLine();
+}
+document.getElementById("stock-add-line").addEventListener("click", () => {
+  const lines = readStockLines();
+  addStockLine(lines.length ? lines[lines.length - 1].gst : "");   // new line starts with the previous line's GST
+});
+document.getElementById("stock-trigger").addEventListener("click", () => {
+  document.getElementById("log-form").classList.remove("active");
+  closeSideForms();
+  selectedCat = null;
+  document.querySelectorAll(".cat-card").forEach(c => c.classList.remove("selected"));
+  document.getElementById("stock-form").classList.add("active");
+  document.getElementById("stock-form").scrollIntoView({ behavior:"smooth", block:"nearest" });
+});
+document.getElementById("stock-cancel-btn").addEventListener("click", () => {
+  document.getElementById("stock-form").classList.remove("active");
+});
+document.getElementById("stock-submit-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("stock-submit-btn");
+  const date = document.getElementById("stock-date").value;
+  const invoice = document.getElementById("stock-invoice").value.trim();
+  if(!invoice){ showToast("Enter the invoice number.", true); return; }
+  if(!date){ showToast("Enter the invoice date.", true); return; }
+  if(date > todayStr()){ showToast("The invoice date can't be in the future.", true); return; }
+  const lines = readStockLines();
+  for(let i = 0; i < lines.length; i++){
+    const l = lines[i], n = lines.length > 1 ? ` (item ${i + 1})` : "";
+    if(!l.productId){ showToast("Choose the item" + n + ".", true); return; }
+    if(!Number.isFinite(l.qty) || l.qty <= 0){ showToast("Enter a quantity" + n + ".", true); return; }
+    if(!Number.isFinite(l.price) || l.price < 0){ showToast("Enter the price per packet" + n + ".", true); return; }
+    if(l.gst === ""){ showToast("Choose the GST %" + n + ".", true); return; }
+  }
+  btn.disabled = true;
+  try{
+    // Guard against saving the same invoice twice by accident
+    const existing = await api(`stocks?select=id&invoice_number=eq.${encodeURIComponent(invoice)}&limit=1`);
+    if(existing.length && !confirm(`Invoice "${invoice}" already has stock recorded. Add these items to it anyway?`)) return;
+    // One request = one transaction: either every line is saved or none is.
+    await api("stocks", {
+      method: "POST",
+      prefer: "return=minimal",
+      body: lines.map(l => ({
+        purchase_date: date, invoice_number: invoice, product_id: l.productId,
+        quantity: l.qty, item_price: l.price, gst_rate: Number(l.gst)
+      }))
+    });
+    showToast(`Stock received: ${lines.length} item${lines.length===1?"":"s"} on invoice ${invoice}.`);
+    document.getElementById("stock-form").classList.remove("active");
+    resetStockForm();
   }catch(err){
     if(err instanceof AuthError){ showSignedOut(err.message); return; }
     showToast(err.message, true);
