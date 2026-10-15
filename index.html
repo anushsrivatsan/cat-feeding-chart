@@ -324,6 +324,9 @@
   button.add-line-btn:hover{border-color:var(--sage); color:var(--sage);}
   .stock-totals{margin-top:14px; font-size:13.5px; color:var(--ink-soft); line-height:1.6;}
   .stock-totals strong{color:var(--ink);}
+
+  .form-help{font-size:13px; color:var(--ink-soft); margin:-8px 0 16px; line-height:1.5;}
+  .log-form select + input[type=text]{margin-top:8px;}
 </style>
 </head>
 <body>
@@ -342,7 +345,7 @@
   <p class="sub">Tap a cat, choose the food and packet count, and log it. Everyone can see who's been fed today.</p>
 
   <div id="signin-panel">
-    <h2>Staff sign in</h2>
+    <h2>Please sign in</h2>
     <form id="signin-form">
       <input type="email" id="signin-email" autocomplete="username" placeholder="Email" required>
       <input type="password" id="signin-password" autocomplete="current-password" placeholder="Password" required>
@@ -355,6 +358,7 @@
     <div class="cat-grid" id="cat-grid"></div>
 
     <div class="wastage-trigger-row">
+      <button class="wastage-trigger item-trigger" id="item-trigger">Add new item</button>
       <button class="wastage-trigger stock-trigger" id="stock-trigger">Receive stock</button>
       <button class="wastage-trigger" id="wastage-trigger">Report wastage</button>
     </div>
@@ -418,6 +422,38 @@
       <div class="submit-row" style="margin-top:16px;">
         <button class="log-btn" id="wastage-submit-btn">Report wastage</button>
         <button class="cancel-btn" id="wastage-cancel-btn">Cancel</button>
+      </div>
+    </div>
+
+    <div class="log-form" id="item-form">
+      <h2>Add a new item</h2>
+      <p class="form-help">Add a new brand, a new flavor, or another pack size. It appears in every dropdown straight away. The rate is used for feeds and stock from now on; earlier entries keep the rate they were logged at.</p>
+      <div class="field-row">
+        <div>
+          <label for="ni-brand">Brand</label>
+          <select id="ni-brand"></select>
+          <input type="text" id="ni-brand-new" maxlength="80" autocomplete="off" placeholder="New brand name" style="display:none;">
+        </div>
+        <div>
+          <label for="ni-flavor">Flavor</label>
+          <select id="ni-flavor"></select>
+          <input type="text" id="ni-flavor-new" maxlength="80" autocomplete="off" placeholder="Flavor (leave blank if none)" style="display:none;">
+        </div>
+      </div>
+      <div class="field-row">
+        <div>
+          <label for="ni-pack">Pack size (grams)</label>
+          <input type="number" id="ni-pack" min="1" step="any" inputmode="decimal" placeholder="e.g. 85">
+        </div>
+        <div>
+          <label for="ni-rate">Rate per packet (₹)</label>
+          <input type="number" id="ni-rate" min="0" step="0.01" inputmode="decimal" placeholder="e.g. 28">
+        </div>
+      </div>
+      <div class="cost-hint" id="ni-hint"></div>
+      <div class="submit-row" style="margin-top:16px;">
+        <button class="log-btn" id="ni-submit">Add item</button>
+        <button class="cancel-btn" id="ni-close">Close</button>
       </div>
     </div>
 
@@ -556,7 +592,7 @@ async function api(path, opts = {}){
   if(!res.ok){
     const err = await res.json().catch(() => ({}));
     if(res.status === 401 || res.status === 403){
-      throw new Error(err.message || "Not allowed — check this account is an approved staff user.");
+      throw new Error(err.message || "Not allowed — check this account is an approved user.");
     }
     throw new Error(err.message || `Request failed (${res.status})`);
   }
@@ -633,24 +669,27 @@ async function fetchToday(){
   }));
 }
 
+const CATS_Q = "cats?select=name,photo_url&active=eq.true&order=sort_order.asc,name.asc";
+const BRANDS_Q = "brands?select=id,brand,flavor,pack_size_grams,cost_per_packet&active=eq.true&order=brand.asc,flavor.asc,pack_size_grams.asc";
+const mapCats = (rows) => rows.map(r => ({ name: r.name, photo: r.photo_url || "" }));
+const mapProducts = (rows) => rows.map(r => ({
+  id: r.id, brand: r.brand, flavor: r.flavor || "",
+  packSize: Number(r.pack_size_grams) || 0, cost: Number(r.cost_per_packet) || 0
+}));
+const byId = (id) => document.getElementById(id);
+
 async function loadAll(){
   try{
-    const [catRows, brandRows] = await Promise.all([
-      api("cats?select=name,photo_url&active=eq.true&order=sort_order.asc,name.asc"),
-      api("brands?select=id,brand,flavor,pack_size_grams,cost_per_packet&active=eq.true&order=brand.asc,flavor.asc,pack_size_grams.asc"),
-      fetchToday()
-    ]);
-    cats = catRows.map(r => ({ name: r.name, photo: r.photo_url || "" }));
-    products = brandRows.map(r => ({
-      id: r.id, brand: r.brand, flavor: r.flavor || "",
-      packSize: Number(r.pack_size_grams) || 0, cost: Number(r.cost_per_packet) || 0
-    }));
+    const [catRows, brandRows] = await Promise.all([api(CATS_Q), api(BRANDS_Q), fetchToday()]);
+    cats = mapCats(catRows);
+    products = mapProducts(brandRows);
     renderCats();
     renderTodayList();
     populatePacketOptions();
     populateBrandOptions();
     populateWastageOptions();
     resetStockForm();
+    populateItemForm();
   }catch(err){
     if(err instanceof AuthError){ showSignedOut(err.message); return; }
     showToast(err.message, true);
@@ -768,6 +807,7 @@ document.getElementById("packets").addEventListener("change", updateCostHint);
 function closeSideForms(){
   document.getElementById("wastage-form").classList.remove("active");
   document.getElementById("stock-form").classList.remove("active");
+  document.getElementById("item-form").classList.remove("active");
 }
 function selectCat(name){
   selectedCat = name;
@@ -890,16 +930,24 @@ const inr = (n) => "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: 2,
 function productLabel(p){
   return `${p.brand} — ${p.flavor || "no flavor"} · ${p.packSize}g`;
 }
+function productOptionsHtml(){
+  return '<option value="">Choose item</option>' +
+    products.map(p => `<option value="${p.id}">${esc(productLabel(p))}</option>`).join("");
+}
+function refreshStockProductOptions(){
+  document.querySelectorAll(".sl-product").forEach(sel => {
+    const keep = sel.value;
+    sel.innerHTML = productOptionsHtml();
+    sel.value = keep;                       // empty if that item no longer exists
+  });
+}
 function addStockLine(gstFromPrevious){
   const wrap = document.createElement("div");
   wrap.className = "stock-line";
   wrap.innerHTML = `
     <div class="sl-item">
       <label>Item</label>
-      <select class="sl-product">
-        <option value="">Choose item</option>
-        ${products.map(p => `<option value="${p.id}">${esc(productLabel(p))}</option>`).join("")}
-      </select>
+      <select class="sl-product">${productOptionsHtml()}</select>
     </div>
     <div>
       <label>Quantity (packets)</label>
@@ -1018,6 +1066,156 @@ document.getElementById("stock-submit-btn").addEventListener("click", async () =
     btn.disabled = false;
   }
 });
+
+/* ---------- Add a new item (brand / flavor / pack size / rate) ---------- */
+const NEW_OPT = "__new__";
+const normName = (s) => String(s || "").trim().replace(/\s+/g, " ");
+const sameName = (a, b) => normName(a).toLowerCase() === normName(b).toLowerCase();
+
+function restoreSelect(id, value){
+  const sel = byId(id);
+  if([...sel.options].some(o => o.value === value)){ sel.value = value; return true; }
+  return false;
+}
+// Rebuild every item dropdown from `products`, keeping whatever the person had selected.
+function repopulateAll(keepItemForm){
+  const feed = { b: byId("brand").value, f: byId("flavor").value, s: byId("pack-size").value };
+  const waste = { b: byId("wastage-brand").value, f: byId("wastage-flavor").value, s: byId("wastage-pack-size").value };
+  populateBrandOptions();
+  if(restoreSelect("brand", feed.b)){
+    populateFlavorOptions();
+    if(restoreSelect("flavor", feed.f)){ populatePackSizeOptions(); restoreSelect("pack-size", feed.s); }
+  }
+  updateCostHint();
+  populateWastageOptions();
+  if(restoreSelect("wastage-brand", waste.b)){
+    populateWastageFlavorOptions();
+    if(restoreSelect("wastage-flavor", waste.f)){ populateWastagePackSizeOptions(); restoreSelect("wastage-pack-size", waste.s); }
+  }
+  refreshStockProductOptions();
+  populateItemForm(keepItemForm);
+}
+function sortProducts(){
+  products.sort((a, b) => a.brand.localeCompare(b.brand) || a.flavor.localeCompare(b.flavor) || a.packSize - b.packSize);
+}
+
+function populateItemForm(keep){
+  const brandSel = byId("ni-brand");
+  const prev = keep || { brand: brandSel.value, flavor: byId("ni-flavor").value };
+  const names = uniqueInOrder(products.map(p => p.brand));
+  brandSel.innerHTML = names.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join("") +
+    `<option value="${NEW_OPT}">+ New brand…</option>`;
+  if(!restoreSelect("ni-brand", prev.brand)) brandSel.value = names.length ? names[0] : NEW_OPT;
+  fillItemFlavors(prev.flavor);
+}
+function fillItemFlavors(preferred){
+  const brand = byId("ni-brand").value, flavorSel = byId("ni-flavor");
+  if(brand === NEW_OPT){
+    flavorSel.innerHTML = "";
+  } else {
+    const flavors = uniqueInOrder(products.filter(p => p.brand === brand).map(p => p.flavor));
+    flavorSel.innerHTML = flavors.map(f => `<option value="${esc(f)}">${esc(f) || "(no flavor)"}</option>`).join("") +
+      `<option value="${NEW_OPT}">+ New flavor…</option>`;
+    if(preferred !== undefined) restoreSelect("ni-flavor", preferred);
+  }
+  updateItemForm();
+}
+function itemFormValues(){
+  const brandChoice = byId("ni-brand").value, newBrand = brandChoice === NEW_OPT;
+  const newFlavor = newBrand || byId("ni-flavor").value === NEW_OPT;
+  return {
+    newBrand, newFlavor,
+    brand: normName(newBrand ? byId("ni-brand-new").value : brandChoice),
+    flavor: normName(newFlavor ? byId("ni-flavor-new").value : byId("ni-flavor").value),
+    pack: parseFloat(byId("ni-pack").value),
+    rate: parseFloat(byId("ni-rate").value)
+  };
+}
+function updateItemForm(){
+  const v = itemFormValues();
+  byId("ni-brand-new").style.display = v.newBrand ? "block" : "none";
+  byId("ni-flavor").style.display = v.newBrand ? "none" : "";
+  byId("ni-flavor-new").style.display = v.newFlavor ? "block" : "none";
+  const lines = [];
+  if(!v.newFlavor){
+    const existing = products.filter(p => p.brand === v.brand && p.flavor === v.flavor);
+    if(existing.length) lines.push("Already listed: " + existing.map(p => `${p.packSize}g at ₹${p.cost}`).join(", "));
+  }
+  if(v.pack > 0 && v.rate >= 0) lines.push(`₹${(v.rate / v.pack).toFixed(2)} per gram`);
+  byId("ni-hint").textContent = lines.join(" · ");
+}
+byId("ni-brand").addEventListener("change", () => fillItemFlavors());
+byId("ni-flavor").addEventListener("change", updateItemForm);
+byId("ni-pack").addEventListener("input", updateItemForm);
+byId("ni-rate").addEventListener("input", updateItemForm);
+
+byId("item-trigger").addEventListener("click", () => {
+  document.getElementById("log-form").classList.remove("active");
+  closeSideForms();
+  selectedCat = null;
+  document.querySelectorAll(".cat-card").forEach(c => c.classList.remove("selected"));
+  byId("item-form").classList.add("active");
+  byId("item-form").scrollIntoView({ behavior:"smooth", block:"nearest" });
+});
+byId("ni-close").addEventListener("click", () => byId("item-form").classList.remove("active"));
+
+byId("ni-submit").addEventListener("click", async () => {
+  const v = itemFormValues();
+  if(!v.brand){ showToast("Enter the brand name.", true); return; }
+  if(!Number.isFinite(v.pack) || v.pack <= 0){ showToast("Enter the pack size in grams.", true); return; }
+  if(!Number.isFinite(v.rate) || v.rate <= 0){ showToast("Enter the rate per packet.", true); return; }
+  const dupe = products.find(p => sameName(p.brand, v.brand) && sameName(p.flavor, v.flavor) && p.packSize === v.pack);
+  if(dupe){
+    showToast(`Already in the list: ${productLabel(dupe)} at ₹${dupe.cost}.`, true);
+    return;
+  }
+  // A mistyped rate quietly skews every cost figure, so ask once about unusual values.
+  if((v.pack > 2000 || v.rate > 1000) &&
+     !confirm(`Add ${v.brand}${v.flavor ? " — " + v.flavor : ""}: ${v.pack}g at ₹${v.rate} per packet?\n\nThat's unusually large — is it correct?`)) return;
+
+  const btn = byId("ni-submit");
+  btn.disabled = true;
+  try{
+    const rows = await api("brands", {
+      method: "POST",
+      prefer: "return=representation",
+      body: { brand: v.brand, flavor: v.flavor, pack_size_grams: v.pack, cost_per_packet: v.rate }
+    });
+    const r = rows[0];     // the database may tidy the spelling, so use what it returns
+    products.push({ id: r.id, brand: r.brand, flavor: r.flavor || "", packSize: Number(r.pack_size_grams), cost: Number(r.cost_per_packet) });
+    sortProducts();
+    // Stay on this brand + flavor so several sizes can be added in a row.
+    repopulateAll({ brand: r.brand, flavor: r.flavor || "" });
+    ["ni-brand-new", "ni-flavor-new", "ni-pack", "ni-rate"].forEach(id => { byId(id).value = ""; });
+    updateItemForm();
+    showToast(`Added ${r.brand}${r.flavor ? " — " + r.flavor : ""}: ${Number(r.pack_size_grams)}g at ₹${Number(r.cost_per_packet)}. It's in the dropdowns now.`);
+    byId("ni-pack").focus();
+  }catch(err){
+    if(err instanceof AuthError){ showSignedOut(err.message); return; }
+    if(/duplicate key/i.test(err.message)){
+      showToast("That item already exists — it may have been switched off. Ask an admin to turn it back on.", true);
+    } else if(/permission denied|row-level security/i.test(err.message)){
+      showToast("Adding items isn't switched on yet — run supabase-catalog-migration.sql in Supabase.", true);
+    } else {
+      showToast(err.message, true);
+    }
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+// Items added on another device show up when this one comes back to the foreground.
+async function refreshCatalog(){
+  if(!session || byId("app").style.display === "none") return;
+  try{
+    const [catRows, brandRows] = await Promise.all([api(CATS_Q), api(BRANDS_Q)]);
+    const newProducts = mapProducts(brandRows), newCats = mapCats(catRows);
+    const sig = (list) => JSON.stringify([...list].sort((a, b) => a.id - b.id));
+    if(sig(newProducts) !== sig(products)){ products = newProducts; sortProducts(); repopulateAll(); }
+    if(JSON.stringify(newCats) !== JSON.stringify(cats)){ cats = newCats; renderCats(); }
+  }catch(err){ if(err instanceof AuthError) showSignedOut(err.message); }
+}
+document.addEventListener("visibilitychange", () => { if(document.visibilityState === "visible") refreshCatalog(); });
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
